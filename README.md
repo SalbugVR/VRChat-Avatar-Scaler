@@ -8,6 +8,10 @@ A Windows desktop application that lets you control your VRChat avatar's size in
 
 ---
 
+<img width="922" height="512" alt="pythonw_ek3Apdztp5" src="https://github.com/user-attachments/assets/ebb9dc52-e5a4-42f4-b541-6d81fc8782da" />
+
+---
+
 ## Disclaimer
 
 This application was made entirely with Claude. I cannot speak entirely to its stability, but I have dogfooded it enough that it has been stable for my use.
@@ -115,6 +119,10 @@ The main control is a horizontal slider that covers VRChat's full supported rang
 **Tick marks** are drawn below the slider at key heights (0.1 m, 0.5 m, 1 m, 2 m, 5 m, 10 m, 50 m, 100 m and more) so you can see at a glance where you are.
 
 If the current world has set height limits via Udon scripting, **red markers** appear on the slider showing the allowed range, and the zones outside those limits are shaded. If the world has fully disabled scaling, the slider fades out and is blocked until you leave.
+
+If you go beyond VRChat's supported range of 0.1m - 100m, you'll be met with a caution message.
+
+> ⚠️ Do **NOT** submit bug reports or contact VRChat Support if issues are encountered while operating outside of the supported range.
 
 ### Exact value entry
 
