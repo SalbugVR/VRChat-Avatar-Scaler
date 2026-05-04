@@ -122,7 +122,7 @@ If the current world has set height limits via Udon scripting, **red markers** a
 
 If you go beyond VRChat's supported range of 0.1m - 100m, you'll be met with a caution message.
 
-> ⚠️ **Important:** Do **NOT** submit bug reports or contact VRChat Support if issues are encountered while operating outside of the supported range.
+> ⚠️ Do **NOT** submit bug reports or contact VRChat Support if issues are encountered while operating outside of the supported range.
 
 ### Exact value entry
 
