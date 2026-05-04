@@ -37,6 +37,7 @@ It also watches for avatar and world changes and can instantly restore your pref
 - [Files included](#files-included)
 - [Troubleshooting](#troubleshooting)
 - [OSC technical reference](#osc-technical-reference)
+- [To-Do List](#to-do-list)
 
 ---
 
@@ -380,3 +381,9 @@ VRChat communicates via UDP using the OSC protocol. The scaler sends to port **9
 | `/avatar/change` | `string` | Receive only | Broadcast by VRChat on every avatar switch and world transition. |
 
 [Full VRChat OSC documentation](https://docs.vrchat.com/docs/osc-overview)
+
+---
+
+## To-Do List
+
+- Integrate SteamVR Input to control avatar height with VR controller inputs.
