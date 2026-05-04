@@ -120,11 +120,9 @@ The main control is a horizontal slider that covers VRChat's full supported rang
 
 If the current world has set height limits via Udon scripting, **red markers** appear on the slider showing the allowed range, and the zones outside those limits are shaded. If the world has fully disabled scaling, the slider fades out and is blocked until you leave.
 
-If you go beyond VRChat's supported range of 0.1m - 100m, you'll be met with this warning.
+If you go beyond VRChat's supported range of 0.1m - 100m, you'll be met with a caution message.
 
 > ⚠️ **Important:** Do **NOT** submit bug reports or contact VRChat Support if issues are encountered while operating outside of the supported range.
-
-<img width="462" height="446" alt="pythonw_uL7CB2d13v" src="https://github.com/user-attachments/assets/0f3f40b7-21de-48e9-89fa-267b77f18748" />
 
 ### Exact value entry
 
