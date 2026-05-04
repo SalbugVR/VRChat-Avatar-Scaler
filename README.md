@@ -14,7 +14,7 @@ A Windows desktop application that lets you control your VRChat avatar's size in
 
 ## Disclaimer
 
-This application was made entirely with Claude. I cannot speak entirely to its stability, but I have dogfooded it enough that it has been stable for my use.
+This application was made entirely with Claude. I cannot speak entirely to its stability, but I have dogfooded and iterated on it enough that it has been stable for my use.
 
 ## What does it do?
 
