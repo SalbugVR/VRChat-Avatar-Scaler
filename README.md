@@ -1,13 +1,14 @@
 # VRChat Avatar Scaler
 
-<img width="922" height="512" alt="pythonw_ek3Apdztp5" src="https://github.com/user-attachments/assets/ebb9dc52-e5a4-42f4-b541-6d81fc8782da" />
-
-
 A Windows desktop application that lets you control your VRChat avatar's size in real time. Set an exact height, use quick presets, adjust with keyboard shortcuts, and have your scale restored automatically whenever you switch avatars or enter a new world — all without touching the in-game menus.
 
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+
+---
+
+<img width="922" height="512" alt="pythonw_ek3Apdztp5" src="https://github.com/user-attachments/assets/ebb9dc52-e5a4-42f4-b541-6d81fc8782da" />
 
 ---
 
