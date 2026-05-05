@@ -195,11 +195,11 @@ Configure this in **Settings → On Avatar / World Change**.
 
 With the `pynput` package installed, you can adjust your scale from anywhere — even when the scaler window is hidden to the tray — using keyboard shortcuts.
 
+See [Keyboard shortcuts](#keyboard-shortcuts) below for the full list and instructions on changing them.
+
 ### OSCQuery
 
 With the `tinyoscquery` package installed, the scaler advertises itself on the local network using mDNS. VRChat detects it automatically and sends OSC messages to it without any fixed port configuration needed. This prevents conflicts with other OSC applications that may be listening on the same ports. When OSCQuery is active, VRChat will show a HUD notification that it has found the scaler. OSCQuery can be toggled in **Settings → Network**.
-
-See [Keyboard shortcuts](#keyboard-shortcuts) below for the full list and instructions on changing them.
 
 ### Height overlay
 
