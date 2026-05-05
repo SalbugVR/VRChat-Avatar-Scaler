@@ -33,7 +33,6 @@ It also watches for avatar and world changes and can instantly restore your pref
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Height overlay](#height-overlay)
 - [Settings reference](#settings-reference)
-- [Eye height vs. total height](#eye-height-vs-total-height)
 - [Files included](#files-included)
 - [Troubleshooting](#troubleshooting)
 - [OSC technical reference](#osc-technical-reference)
@@ -327,18 +326,6 @@ Configure whether keyboard shortcuts are enabled and change the key bindings for
 | Recv port | 9001 | Fallback port the scaler listens on when OSCQuery is disabled. |
 
 Settings are saved to `scaler_config.json` in the same folder as the script. You can delete this file to reset everything to defaults.
-
----
-
-## Eye height vs. total height
-
-VRChat uses **eye height** — the height of the avatar's eyes above the ground — to set scale, not total height. On most standard-sized humanoid avatars, the eyes are roughly **10 cm below the top of the head**.
-
-A handy rule of thumb:
-
-> **Eye height ≈ Total height − 0.10 m**
-
-**Example:** If you want your avatar to appear 1.60 m tall, set your eye height to approximately **1.50 m**.
 
 ---
 
