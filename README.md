@@ -33,7 +33,6 @@ It also watches for avatar and world changes and can instantly restore your pref
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Height overlay](#height-overlay)
 - [Settings reference](#settings-reference)
-- [Eye height vs. total height](#eye-height-vs-total-height)
 - [Files included](#files-included)
 - [Troubleshooting](#troubleshooting)
 - [OSC technical reference](#osc-technical-reference)
@@ -60,7 +59,7 @@ It also watches for avatar and world changes and can instantly restore your pref
 
 This is the easiest way, especially if you are not familiar with the command line.
 
-1. [Download](https://github.com/SalbugVR/VRChat-Avatar-Scaler/releases) and unzip the VRChat Avatar Scaler folder somewhere convenient (e.g. your Documents folder).
+1. [Download](https://github.com/SalbugVR/VRChat-Avatar-Scaler/releases) and unzip `vrchat_avatar_scaler.zip` somewhere convenient (e.g. your Documents folder).
 2. Double-click **`Install.bat`**.
 3. Follow the prompts. The installer will:
    - Check that Python is installed and up to date
@@ -79,7 +78,7 @@ Use this if the installer fails, or if you prefer to do things yourself.
 
 **Step 1 — Download Avatar Scaler**
 
-[Download](https://github.com/SalbugVR/VRChat-Avatar-Scaler/releases) and unzip the VRChat Avatar Scaler folder somewhere convenient (e.g. your Documents folder).
+[Download](https://github.com/SalbugVR/VRChat-Avatar-Scaler/releases) and unzip `vrchat_avatar_scaler.zip` somewhere convenient (e.g. your Documents folder).
 
 **Step 2 — Install Python**
 
@@ -195,11 +194,11 @@ Configure this in **Settings → On Avatar / World Change**.
 
 With the `pynput` package installed, you can adjust your scale from anywhere — even when the scaler window is hidden to the tray — using keyboard shortcuts.
 
+See [Keyboard shortcuts](#keyboard-shortcuts) below for the full list and instructions on changing them.
+
 ### OSCQuery
 
 With the `tinyoscquery` package installed, the scaler advertises itself on the local network using mDNS. VRChat detects it automatically and sends OSC messages to it without any fixed port configuration needed. This prevents conflicts with other OSC applications that may be listening on the same ports. When OSCQuery is active, VRChat will show a HUD notification that it has found the scaler. OSCQuery can be toggled in **Settings → Network**.
-
-See [Keyboard shortcuts](#keyboard-shortcuts) below for the full list and instructions on changing them.
 
 ### Height overlay
 
@@ -330,18 +329,6 @@ Settings are saved to `scaler_config.json` in the same folder as the script. You
 
 ---
 
-## Eye height vs. total height
-
-VRChat uses **eye height** — the height of the avatar's eyes above the ground — to set scale, not total height. On most standard-sized humanoid avatars, the eyes are roughly **10 cm below the top of the head**.
-
-A handy rule of thumb:
-
-> **Eye height ≈ Total height − 0.10 m**
-
-**Example:** If you want your avatar to appear 1.60 m tall, set your eye height to approximately **1.50 m**.
-
----
-
 ## Files included
 
 | File | Purpose |
@@ -349,7 +336,6 @@ A handy rule of thumb:
 | `vrchat_avatar_scaler.pyw` | The main application. |
 | `Install.bat` | One-click installer — run this first. |
 | `Launch Scaler (Silent).vbs` | Launches the app without a console window. Use this for daily use and shortcuts. |
-| `README.md` | This file. |
 | `scaler_config.json` | Created automatically on first run. Stores all settings and your last-used height. Delete to reset to defaults. |
 
 ---
