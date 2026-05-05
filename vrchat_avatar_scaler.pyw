@@ -72,28 +72,50 @@ except Exception:
     _OSCQ = False
 
 # ─── Single-instance lock (UDP socket bound to a fixed port) ─────────────────
+import atexit as _atexit
 import socket as _socket
 _LOCK_PORT = 47423   # arbitrary private port used only as a lock
+_LOCK_SHOW_MESSAGE = b"SHOW"
 
 def _acquire_instance_lock():
     """Returns a bound socket that acts as a process lock, or None if already running."""
     s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
     try:
         s.bind(("127.0.0.1", _LOCK_PORT))
+        s.settimeout(0.5)
         return s   # we own the lock
     except OSError:
         s.close()
         return None
 
+def _ask_running_instance_to_show():
+    """Ask the already-running copy to show its main window."""
+    try:
+        with _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM) as s:
+            s.sendto(_LOCK_SHOW_MESSAGE, ("127.0.0.1", _LOCK_PORT))
+    except OSError:
+        pass
+
+def _release_instance_lock():
+    global _instance_lock
+    if _instance_lock is not None:
+        try:
+            _instance_lock.close()
+        except OSError:
+            pass
+        _instance_lock = None
+
 _instance_lock = _acquire_instance_lock()
 if _instance_lock is None:
+    _ask_running_instance_to_show()
     _r = _tk.Tk(); _r.withdraw()
     _mb.showinfo(
         "VRChat Avatar Scaler",
         "VRChat Avatar Scaler is already running.\n\n"
-        "Check the system tray to find it."
+        "I asked the existing copy to show its window."
     )
     raise SystemExit(0)
+_atexit.register(_release_instance_lock)
 
 # ─── Standard imports ─────────────────────────────────────────────────────────
 import json, math, os, sys, threading, time
@@ -1551,6 +1573,7 @@ class ScalerApp:
         self._oscq.start(self.cfg, self.cfg["recv_port"])
         self._osc_listen()
         self._vrc_monitor_start()
+        self._instance_signal_start()
 
         root.protocol("WM_DELETE_WINDOW", self._hide)
         if self.cfg.get("start_minimized"):
@@ -1858,6 +1881,27 @@ class ScalerApp:
         self.root.lift()
         self.root.focus_force()
 
+    def _instance_signal_start(self):
+        """Show the window when a second launch asks this instance to appear."""
+        if _instance_lock is None:
+            return
+
+        def listen():
+            while True:
+                try:
+                    data, _ = _instance_lock.recvfrom(64)
+                except _socket.timeout:
+                    continue
+                except OSError:
+                    return
+                if data == _LOCK_SHOW_MESSAGE:
+                    try:
+                        self.root.after(0, self._show_window)
+                    except tk.TclError:
+                        return
+
+        threading.Thread(target=listen, daemon=True).start()
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
     def _quit(self):
         self.cfg["last_height"] = self._h
@@ -1868,6 +1912,7 @@ class ScalerApp:
             self._overlay.destroy()
         try: self.tray.stop()
         except Exception: pass
+        _release_instance_lock()
         self.root.destroy()
 
     # ── VRChat process monitor ────────────────────────────────────────────────
