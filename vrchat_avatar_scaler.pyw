@@ -8,7 +8,8 @@ Required (pip install):
     python-osc  pystray  Pillow  psutil
 
 Optional (pip install):
-    pynput      — enables global keyboard hotkeys (no administrator rights required)
+    pynput               — enables global keyboard hotkeys (no administrator rights required)
+    tinyoscquery zeroconf requests — enables OSCQuery for automatic port negotiation with VRChat
 
 VRChat OSC ports (defaults):
     Send  →  9000   (VRChat listens here)
@@ -59,6 +60,16 @@ try:
 except Exception:
     _KB = False
 
+# tinyoscquery + zeroconf: OSCQuery service advertisement and discovery
+try:
+    from tinyoscquery.queryservice import OSCQueryService
+    from tinyoscquery.query       import OSCQueryBrowser, OSCQueryClient
+    from tinyoscquery.utility     import get_open_tcp_port, get_open_udp_port
+    from tinyoscquery.shared.node import OSCAccess
+    _OSCQ = True
+except Exception:
+    _OSCQ = False
+
 # ─── Single-instance lock (UDP socket bound to a fixed port) ─────────────────
 import socket as _socket
 _LOCK_PORT = 47423   # arbitrary private port used only as a lock
@@ -106,6 +117,7 @@ _DEFAULTS = {
     "overlay_x":                None,
     "overlay_y":                None,
     "suppress_range_warning":   False,
+    "oscquery_enabled":         True,
     "keyboard_enabled":         True,
     "kb_fine_up":               "ctrl+alt+up",
     "kb_fine_down":             "ctrl+alt+down",
@@ -1115,7 +1127,32 @@ class Settings:
         self._hotkey_recorder.pack(fill="x", pady=(0, 8))
 
         # ── Network ───────────────────────────────────────────────────────
-        s5 = self._section("Network  (Advanced)")
+        s5 = self._section("Network")
+
+        # OSCQuery toggle
+        self._oscq_en = tk.BooleanVar(value=self._cfg.get("oscquery_enabled", True))
+        oscq_cb = self._check(s5,
+            "Use OSCQuery for automatic port negotiation  (recommended)",
+            self._oscq_en,
+            "OSCQuery lets VRChat and the scaler find each other automatically "
+            "using any available ports, eliminating conflicts with other OSC applications. "
+            "When enabled, the fixed send/receive ports below are used as fallbacks only. "
+            "Requires the 'tinyoscquery' package (pip install tinyoscquery).")
+        if not _OSCQ:
+            oscq_cb.config(state="disabled")
+            tk.Label(s5,
+                     text="  ⚠ 'tinyoscquery' not installed — run Install.bat to set it up",
+                     font=FS, bg=BG, fg=WARN).pack(anchor="w", pady=(0, 6))
+        else:
+            tk.Label(s5,
+                     text="    When OSCQuery is active, VRChat shows a HUD notification "
+                          "that it found this application.",
+                     font=FS, bg=BG, fg=DIM).pack(anchor="w", pady=(0, 6))
+
+        tk.Frame(s5, bg=BG3, height=1).pack(fill="x", pady=(4, 8))
+        tk.Label(s5, text="Fixed ports (used when OSCQuery is disabled or unavailable):",
+                 font=FS, bg=BG, fg=DIM).pack(anchor="w", pady=(0, 4))
+
         nr = tk.Frame(s5, bg=BG); nr.pack(fill="x")
         tk.Label(nr, text="VRChat IP:", font=FB, bg=BG, fg=DIM).pack(side="left")
         self._ip = tk.StringVar(value=self._cfg["vrc_ip"])
@@ -1145,6 +1182,7 @@ class Settings:
             "run_on_startup":           self._startup.get(),
             "start_minimized":          self._mini.get(),
             "suppress_range_warning":   self._sup.get(),
+            "oscquery_enabled":         self._oscq_en.get(),
             "keyboard_enabled":         self._kb_en.get(),
             "vrc_ip":                   self._ip.get().strip(),
             "send_port":                sp,
@@ -1340,6 +1378,113 @@ class HeightOverlay:
             time.sleep(self._POLL_S)
 
 
+# ─── OSCQuery manager ─────────────────────────────────────────────────────────
+
+class OSCQueryManager:
+    """
+    Handles OSCQuery service advertisement and VRChat discovery.
+
+    When active:
+      • Picks a free UDP port for the OSC listener (no fixed 9001 conflict).
+      • Picks a free TCP port for the OSCQuery HTTP server.
+      • Advertises the service via mDNS so VRChat finds us automatically.
+      • Advertises /avatar in the address tree so VRChat sends avatar events here.
+      • Discovers VRChat's own OSCQuery service to learn its actual OSC send port.
+      • Calls on_vrc_found(ip, osc_port) when VRChat is discovered.
+
+    Falls back gracefully if tinyoscquery is not installed or fails.
+    """
+    SERVICE_NAME     = "VRChatAvatarScaler"
+    DISCOVERY_DELAY  = 2.0    # seconds to wait for mDNS responses
+    RETRY_INTERVAL   = 10.0   # seconds between re-discovery attempts
+
+    def __init__(self, on_vrc_found, on_status):
+        self._on_found   = on_vrc_found    # callback(ip: str, port: int)
+        self._on_status  = on_status       # callback(msg: str, ok: bool)
+        self._service:   OSCQueryService | None = None
+        self._running    = False
+        self._recv_port: int | None = None   # dynamic UDP port we chose
+
+    @property
+    def recv_port(self) -> int | None:
+        """The dynamic UDP port the OSC server should listen on, or None."""
+        return self._recv_port
+
+    def start(self, cfg: dict, osc_port_hint: int):
+        """
+        Start advertising and begin VRChat discovery.
+        osc_port_hint is the fallback if dynamic port allocation fails.
+        """
+        if not _OSCQ or not cfg.get("oscquery_enabled", True):
+            return
+
+        try:
+            self._recv_port = get_open_udp_port()
+            http_port       = get_open_tcp_port()
+        except Exception:
+            self._recv_port = osc_port_hint
+            http_port       = osc_port_hint + 1
+
+        try:
+            self._service = OSCQueryService(
+                self.SERVICE_NAME, http_port, self._recv_port
+            )
+            # Advertise /avatar so VRChat knows to send us avatar change events
+            # and all avatar parameter updates (including /avatar/eyeheight).
+            self._service.advertise_endpoint(
+                "/avatar",
+                access=OSCAccess.WRITEONLY_VALUE
+            )
+            self._on_status(
+                f"OSCQuery active — listening on :{self._recv_port} "
+                f"(HTTP :{http_port})", True)
+        except Exception as e:
+            self._on_status(f"OSCQuery failed to start: {e}", False)
+            self._recv_port = None
+            self._service   = None
+            return
+
+        self._running = True
+        threading.Thread(target=self._discover_loop, daemon=True).start()
+
+    def stop(self):
+        self._running = False
+        if self._service:
+            try:
+                del self._service   # triggers __del__ → unregister_all_services
+            except Exception:
+                pass
+            self._service = None
+
+    def restart(self, cfg: dict, osc_port_hint: int):
+        self.stop()
+        time.sleep(0.3)
+        self.start(cfg, osc_port_hint)
+
+    # ── discovery ─────────────────────────────────────────────────────────────
+
+    def _discover_loop(self):
+        """Periodically browse for VRChat's OSCQuery service."""
+        while self._running:
+            try:
+                browser = OSCQueryBrowser()
+                time.sleep(self.DISCOVERY_DELAY)
+                svc = browser.find_service_by_name("VRChat")
+                if svc:
+                    client    = OSCQueryClient(svc)
+                    host_info = client.get_host_info()
+                    if host_info:
+                        self._on_found(host_info.osc_ip, host_info.osc_port)
+                        return   # found — stop discovery loop
+            except Exception:
+                pass
+            # Wait before retrying
+            for _ in range(int(self.RETRY_INTERVAL / 0.5)):
+                if not self._running:
+                    return
+                time.sleep(0.5)
+
+
 # ─── Main application ─────────────────────────────────────────────────────────
 class ScalerApp:
     def __init__(self, root: tk.Tk):
@@ -1356,6 +1501,12 @@ class ScalerApp:
         self._svr_on:    bool          = False   # server started
         self.tray:       pystray.Icon | None = None
         self._overlay:   HeightOverlay | None = None
+
+        # OSCQuery manager (optional — degrades gracefully)
+        self._oscq = OSCQueryManager(
+            on_vrc_found=self._on_vrc_oscquery_found,
+            on_status=lambda msg, ok: self.root.after(0, lambda: self._status(msg, ok)),
+        )
 
         # Input handlers
         self._kb_input   = KeyboardInput(
@@ -1395,6 +1546,7 @@ class ScalerApp:
         self._refresh_badges()
 
         self._tray_setup()
+        self._oscq.start(self.cfg, self.cfg["recv_port"])
         self._osc_listen()
         self._vrc_monitor_start()
 
@@ -1626,6 +1778,26 @@ class ScalerApp:
     def _start_inputs(self):
         self._kb_input.start(self.cfg)
 
+    # ── OSCQuery callbacks ────────────────────────────────────────────────────
+    def _on_vrc_oscquery_found(self, ip: str, port: int):
+        """Called (on main thread) when VRChat is discovered via OSCQuery."""
+        self._osc = udp_client.SimpleUDPClient(ip, port)
+        self._update_port_label()
+        self._status(
+            f"OSCQuery: discovered VRChat at {ip}:{port} — sending there now",
+            True)
+
+    def _update_port_label(self):
+        recv = self._oscq.recv_port or self.cfg["recv_port"]
+        if self._oscq.recv_port:
+            self._plbl.config(
+                text=f"OSCQuery  ←:{recv}",
+                fg=A2)
+        else:
+            self._plbl.config(
+                text=f"→:{self.cfg['send_port']}  ←:{self.cfg['recv_port']}",
+                fg=DIM)
+
     def _start_overlay(self):
         self._overlay = HeightOverlay(self.root, self.cfg)
         self._update_overlay_btn()
@@ -1646,7 +1818,8 @@ class ScalerApp:
     def _open_settings(self):
         def on_save():
             self._osc = udp_client.SimpleUDPClient(self.cfg["vrc_ip"], self.cfg["send_port"])
-            self._plbl.config(text=f"→:{self.cfg['send_port']}  ←:{self.cfg['recv_port']}")
+            self._oscq.restart(self.cfg, self.cfg["recv_port"])
+            self._update_port_label()
             self._refresh_badges()
             self._kb_input.restart(self.cfg)
         Settings(self.root, self.cfg, on_save, lambda: self._h)
@@ -1688,6 +1861,7 @@ class ScalerApp:
         self.cfg["last_height"] = self._h
         _save(self.cfg)
         self._kb_input.stop()
+        self._oscq.stop()
         if self._overlay:
             self._overlay.destroy()
         try: self.tray.stop()
@@ -1739,15 +1913,23 @@ class ScalerApp:
         d.map(OSC_ALLOWED, self._oh_allowed)
         d.map(OSC_CHANGE,  self._oh_change)
         d.set_default_handler(lambda *_: None)
+
+        # Use the dynamic port assigned by OSCQueryManager if available,
+        # otherwise fall back to the configured fixed port.
+        port = self._oscq.recv_port or self.cfg["recv_port"]
+
         try:
-            srv = osc_server.ThreadingOSCUDPServer(("0.0.0.0", self.cfg["recv_port"]), d)
+            srv = osc_server.ThreadingOSCUDPServer(("0.0.0.0", port), d)
             self._svr_on = True
             threading.Thread(target=srv.serve_forever, daemon=True).start()
-            self._status(
-                f"Listening on :{self.cfg['recv_port']} — enable OSC in VRChat ▸ Action Menu ▸ OSC",
-                True)
+            self._update_port_label()
+            if not (self._oscq.recv_port):
+                # OSCQuery not active — show the manual-enable reminder
+                self._status(
+                    f"Listening on :{port} — enable OSC in VRChat ▸ Action Menu ▸ OSC",
+                    True)
         except OSError as e:
-            self._status(f"Port {self.cfg['recv_port']} in use — receive disabled ({e})", False)
+            self._status(f"Port {port} in use — receive disabled ({e})", False)
 
     def _oh_height(self, _, *args):
         if args:
