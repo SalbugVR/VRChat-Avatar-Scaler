@@ -309,7 +309,7 @@ Only one of these can be active at a time. If neither is enabled, VRChat's scale
 
 | Setting | Description |
 |---|---|
-| Run on Windows startup | Creates a startup shortcut so the scaler launches when you log in. Unticking removes the shortcut. |\
+| Run on Windows startup | Creates a startup shortcut so the scaler launches when you log in. Unticking removes the shortcut. |
 | Hide to tray when closing window | Changes the behaviour of the × button to whether it'll close or hide the application. |
 | Auto-launch when VRChat starts | Brings the scaler window to the front automatically when VRChat is detected. |
 | Auto-close when VRChat exits | Exits the scaler 1.5 seconds after VRChat closes. |
