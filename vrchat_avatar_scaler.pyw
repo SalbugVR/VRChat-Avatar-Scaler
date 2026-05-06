@@ -10,7 +10,7 @@ Required (pip install):
 Optional (pip install):
     pynput               — enables global keyboard hotkeys (no administrator rights required)
     tinyoscquery zeroconf requests — enables OSCQuery for automatic port negotiation with VRChat
-                                     (install via: pip install git+https://github.com/cyberkitsune/tinyoscquery.git zeroconf requests)
+                                     (install via: pip install git+https://github.com/Hackebein/tinyoscquery.git zeroconf requests)
 
 VRChat OSC ports (defaults):
     Send  →  9000   (VRChat listens here)
@@ -72,53 +72,31 @@ except Exception:
     _OSCQ = False
 
 # ─── Single-instance lock (UDP socket bound to a fixed port) ─────────────────
-import atexit as _atexit
 import socket as _socket
 _LOCK_PORT = 47423   # arbitrary private port used only as a lock
-_LOCK_SHOW_MESSAGE = b"SHOW"
 
 def _acquire_instance_lock():
     """Returns a bound socket that acts as a process lock, or None if already running."""
     s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
     try:
         s.bind(("127.0.0.1", _LOCK_PORT))
-        s.settimeout(0.5)
         return s   # we own the lock
     except OSError:
         s.close()
         return None
 
-def _ask_running_instance_to_show():
-    """Ask the already-running copy to show its main window."""
-    try:
-        with _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM) as s:
-            s.sendto(_LOCK_SHOW_MESSAGE, ("127.0.0.1", _LOCK_PORT))
-    except OSError:
-        pass
-
-def _release_instance_lock():
-    global _instance_lock
-    if _instance_lock is not None:
-        try:
-            _instance_lock.close()
-        except OSError:
-            pass
-        _instance_lock = None
-
 _instance_lock = _acquire_instance_lock()
 if _instance_lock is None:
-    _ask_running_instance_to_show()
     _r = _tk.Tk(); _r.withdraw()
     _mb.showinfo(
         "VRChat Avatar Scaler",
         "VRChat Avatar Scaler is already running.\n\n"
-        "I asked the existing copy to show its window."
+        "Check the system tray to find it."
     )
     raise SystemExit(0)
-_atexit.register(_release_instance_lock)
 
 # ─── Standard imports ─────────────────────────────────────────────────────────
-import json, math, os, signal, sys, threading, time
+import json, math, os, sys, threading, time
 import ctypes as _ctypes
 
 from pathlib import Path
@@ -136,6 +114,7 @@ _DEFAULTS = {
     "auto_launch_with_vrchat":  False,
     "run_on_startup":           False,
     "start_minimized":          False,
+    "close_to_tray":            True,
     "overlay_enabled":          False,
     "overlay_x":                None,
     "overlay_y":                None,
@@ -397,9 +376,6 @@ class LogSlider(tk.Canvas):
         tr    = self._TR
         x0, x1 = pad, w - pad
         ty0   = cy - tr; ty1 = cy + tr
-
-        # Alpha for locked state: draw a translucent rectangle at the end
-        alpha = 0.35 if self._locked else 1.0
 
         lv  = _clamp(self._var.get(), self._lo, self._hi)
         xc  = self._lv_to_x(lv)
@@ -879,6 +855,18 @@ class HotkeyRecorder(tk.Frame):
 
 
 
+    def _cancel_record(self, action: str):
+        """Cancel an in-progress recording without applying a new binding."""
+        prev = self._recording
+        self._recording = None
+        try:
+            ctrl = _pynput_kb.Controller()
+            ctrl.tap(_pynput_kb.Key.escape)
+        except Exception:
+            pass
+        if prev:
+            self._finish_record(prev, None)
+
     def _reset(self, action: str):
         default  = KeyboardInput.DEFAULTS[action]
         cfg_key  = KeyboardInput.CFG_KEYS[action]
@@ -1110,6 +1098,12 @@ class Settings:
                     "launches automatically when you log in. "
                     "Pair with 'Start minimized to tray' to keep it out of the way "
                     "until VRChat is running.")
+        self._close_tray = tk.BooleanVar(value=self._cfg.get("close_to_tray", True))
+        self._check(s3, "Hide to tray when closing window",
+                    self._close_tray,
+                    "When ticked, clicking the × button hides the scaler to the system "
+                    "tray rather than exiting. Use Quit in the tray menu to exit fully.\n\n"
+                    "When unticked, the × button exits the application completely.")
         self._check(s3, "Auto-launch when VRChat starts", self._al,
                     "The scaler will automatically show its window when VRChat is detected "
                     "as running. Useful when starting the scaler before VRChat.")
@@ -1204,6 +1198,7 @@ class Settings:
             "auto_close_with_vrchat":   self._ac.get(),
             "auto_launch_with_vrchat":  self._al.get(),
             "run_on_startup":           self._startup.get(),
+            "close_to_tray":            self._close_tray.get(),
             "start_minimized":          self._mini.get(),
             "suppress_range_warning":   self._sup.get(),
             "oscquery_enabled":         self._oscq_en.get(),
@@ -1523,8 +1518,6 @@ class ScalerApp:
         self._udon_max:  float | None  = None
         self._locked:    bool          = False
         self._svr_on:    bool          = False   # server started
-        self._closing:   bool          = False
-        self._vrc_monitor_running      = False
         self.tray:       pystray.Icon | None = None
         self._overlay:   HeightOverlay | None = None
 
@@ -1575,11 +1568,8 @@ class ScalerApp:
         self._oscq.start(self.cfg, self.cfg["recv_port"])
         self._osc_listen()
         self._vrc_monitor_start()
-        self._instance_signal_start()
-        self._install_signal_handlers()
 
-        close_handler = self._quit if sys.platform.startswith("linux") else self._hide
-        root.protocol("WM_DELETE_WINDOW", close_handler)
+        root.protocol("WM_DELETE_WINDOW", self._on_close_button)
         if self.cfg.get("start_minimized"):
             root.after(150, self._hide)
 
@@ -1880,81 +1870,36 @@ class ScalerApp:
     def _hide(self):
         self.root.withdraw()
 
+    def _on_close_button(self):
+        """Handles the window × button — hides to tray or quits based on settings."""
+        if self.cfg.get("close_to_tray", True) and not sys.platform.startswith("linux"):
+            self._hide()
+        else:
+            self._quit()
+
     def _show_window(self):
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
 
-    def _instance_signal_start(self):
-        """Show the window when a second launch asks this instance to appear."""
-        if _instance_lock is None:
-            return
-
-        def listen():
-            while True:
-                try:
-                    data, _ = _instance_lock.recvfrom(64)
-                except _socket.timeout:
-                    continue
-                except OSError:
-                    return
-                if data == _LOCK_SHOW_MESSAGE:
-                    try:
-                        self.root.after(0, self._show_window)
-                    except tk.TclError:
-                        return
-
-        threading.Thread(target=listen, daemon=True).start()
-
-    def _install_signal_handlers(self):
-        def handle_signal(*_):
-            try:
-                self.root.after(0, self._quit)
-            except tk.TclError:
-                pass
-
-        for sig in (getattr(signal, "SIGINT", None), getattr(signal, "SIGTERM", None)):
-            if sig is None:
-                continue
-            try:
-                signal.signal(sig, handle_signal)
-            except (OSError, ValueError):
-                pass
-
     # ── Lifecycle ─────────────────────────────────────────────────────────────
     def _quit(self):
-        if self._closing:
-            return
-        self._closing = True
-        self._vrc_monitor_running = False
         self.cfg["last_height"] = self._h
         _save(self.cfg)
         self._kb_input.stop()
         self._oscq.stop()
         if self._overlay:
             self._overlay.destroy()
-        if self.tray:
-            threading.Thread(target=self._stop_tray, daemon=True).start()
-        _release_instance_lock()
-        try:
-            self.root.quit()
-            self.root.destroy()
-        except tk.TclError:
-            pass
-
-    def _stop_tray(self):
-        try:
-            self.tray.stop()
-        except Exception:
-            pass
+        try: self.tray.stop()
+        except Exception: pass
+        self.root.destroy()
 
     # ── VRChat process monitor ────────────────────────────────────────────────
     def _vrc_monitor_start(self):
-        self._vrc_monitor_running = True
         threading.Thread(target=self._vrc_loop, daemon=True).start()
 
     def _vrc_loop(self):
-        while self._vrc_monitor_running:
+        while True:
             on = any(
                 "vrchat" in (p.info.get("name") or "").lower()
                 for p in psutil.process_iter(["name"])
@@ -1962,10 +1907,7 @@ class ScalerApp:
             )
             if on != self._vrc_on:
                 self._vrc_on = on
-                try:
-                    self.root.after(0, self._vrc_changed, on)
-                except tk.TclError:
-                    return
+                self.root.after(0, self._vrc_changed, on)
             time.sleep(3)
 
     def _vrc_changed(self, on: bool):
@@ -2200,13 +2142,8 @@ def main():
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
     root.geometry(f"+{(sw-w)//2}+{(sh-h)//2}")
 
-    try:
-        root.mainloop()
-    except KeyboardInterrupt:
-        app._quit()
-    finally:
-        _save(app.cfg)
-        _release_instance_lock()
+    root.mainloop()
+    _save(app.cfg)
 
 
 if __name__ == "__main__":
