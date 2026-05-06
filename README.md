@@ -142,7 +142,7 @@ To go beyond VRChat's supported range, you'll need to manually input your desire
 
 If you go beyond VRChat's supported range of 0.1 m - 100 m, you'll be met with a caution message.
 
-> ⚠️ Do **NOT** submit bug reports or contact VRChat Support if issues are encountered while operating outside of the supported range.
+> ⚠️ **DO NOT** submit bug reports or contact VRChat Support if issues are encountered while operating outside of the supported range.
 
 ### Exact value entry
 
