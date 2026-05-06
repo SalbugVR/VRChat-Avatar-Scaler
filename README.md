@@ -8,7 +8,7 @@ A Windows desktop application that lets you control your VRChat avatar's size in
 
 ---
 
-<img width="922" height="512" alt="pythonw_ek3Apdztp5" src="https://github.com/user-attachments/assets/ebb9dc52-e5a4-42f4-b541-6d81fc8782da" />
+<img width="922" height="512" alt="image" src="https://github.com/user-attachments/assets/b4651e5a-c89e-49fa-b4ca-64e100c4d8c0" />
 
 ---
 
@@ -108,7 +108,7 @@ pip install "git+https://github.com/Hackebein/tinyoscquery.git" zeroconf request
 
 **Step 4 — Launch the app**
 
-Double-click **`Launch Scaler (Silent).vbs`** to start without a console window appearing.
+Double-click **`Launch Scaler (Silent).vbs`** or **`vrchat_avatar_scaler.pyw`** to start.
 
 ---
 
@@ -119,6 +119,12 @@ OSC is the feature that lets external tools like this one talk to VRChat.
 **How to enable OSC**
 1. Open the **Action Menu**.
 2. Go to **Options → OSC → Enabled**.
+
+**Alternatively**
+1. Open Quick Menu with `Esc` key on keyboard or configured menu button on VR controllers.
+2. Double-click the settings tab (⚙️) at bottom-right of the menu to quickly open Main Menu settings.
+3. Click `🔍 Search all settings` in top-right corner of Main Menu and type `osc`
+4. Enable `OSC`
 
 ---
 
