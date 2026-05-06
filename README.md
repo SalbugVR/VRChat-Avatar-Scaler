@@ -134,7 +134,7 @@ OSC is the feature that lets external tools like this one talk to VRChat.
 
 The main control is a horizontal slider that covers VRChat's full supported range — **0.1 m to 100 m** — using a logarithmic scale. This means small heights (like 0.2 m) are just as easy to fine-tune as large ones (like 50 m). The slider gets more precise as you make the window wider.
 
-**Tick marks** are drawn below the slider at key heights (0.1 m, 0.5 m, 1 m, 2 m, 5 m, 10 m, 50 m, 100 m and more) so you can see at a glance where you are.
+**Tick marks** are drawn below the slider at key heights so you can see at a glance where you are.
 
 If the current world has set height limits via Udon scripting, **red markers** appear on the slider showing the allowed range, and the zones outside those limits are shaded. If the world has fully disabled scaling, the slider fades out and is blocked until you leave.
 
