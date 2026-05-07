@@ -21,6 +21,7 @@ Docs:
 """
 
 # ─── Dependency guard ─────────────────────────────────────────────────────────
+import sys as _sys
 import tkinter as _tk
 from tkinter import messagebox as _mb
 
@@ -50,6 +51,12 @@ if _need:
         + "\n".join(f"    • {p}" for p in _need)
         + "\n\nInstall them with:\n\n"
         + f"    pip install {' '.join(_need)}"
+        + "\n\n"
+        + "If you already ran Install.bat and still see this, you may have\n"
+        "multiple Python installations. Run Install.bat again and check\n"
+        "the output carefully, or install manually using:\n\n"
+        + f"    \"{_sys.executable}\" -m pip install {' '.join(_need)}\n\n"
+        + f"(This copy of Python is at: {_sys.executable})"
     )
     raise SystemExit(1)
 
@@ -124,6 +131,7 @@ _DEFAULTS = {
     "overlay_enabled":          False,
     "overlay_x":                None,
     "overlay_y":                None,
+    "custom_presets":           [],
     "suppress_range_warning":   False,
     "oscquery_enabled":         True,
     "keyboard_enabled":         True,
@@ -903,6 +911,107 @@ class HotkeyRecorder(tk.Frame):
         self._rows[action]["lv"].set(_fmt_hotkey(default))
         self._rows[action]["lbl"].config(fg=AHL)
 
+
+
+# ─── Custom preset editor dialog ─────────────────────────────────────────────
+
+class PresetEditorDialog:
+    """
+    Small modal dialog for adding or editing a custom preset.
+    Calls on_save(name: str, height: float) when confirmed.
+    """
+    def __init__(self, parent: tk.Tk, on_save,
+                 initial_name: str = "", initial_height: float = 1.65):
+        self._on_save = on_save
+
+        self.win = tk.Toplevel(parent)
+        self.win.title("Custom Preset")
+        self.win.configure(bg=BG)
+        self.win.resizable(False, False)
+        self.win.grab_set()
+        self.win.attributes("-topmost", True)
+
+        parent.update_idletasks()
+        pw, ph = parent.winfo_width(), parent.winfo_height()
+        px, py = parent.winfo_x(), parent.winfo_y()
+
+        # Header
+        tk.Frame(self.win, bg=A, height=4).pack(fill="x")
+        tk.Label(self.win, text="  Custom Preset",
+                 font=FH, bg=BG2, fg=AHL).pack(fill="x", ipady=7)
+
+        body = tk.Frame(self.win, bg=BG)
+        body.pack(padx=20, pady=14, fill="x")
+
+        # Name
+        tk.Label(body, text="Name:", font=FB, bg=BG, fg=TEXT).pack(anchor="w")
+        self._name_var = tk.StringVar(value=initial_name)
+        name_entry = tk.Entry(body, textvariable=self._name_var,
+                              width=22, font=FB,
+                              bg=BG3, fg=TEXT, insertbackground=TEXT,
+                              relief="flat", bd=0,
+                              highlightbackground=A, highlightthickness=1)
+        name_entry.pack(fill="x", ipady=4, pady=(2, 10))
+
+        # Height
+        tk.Label(body, text="Eye height (metres):", font=FB, bg=BG, fg=TEXT).pack(anchor="w")
+        self._h_var = tk.StringVar(value=f"{initial_height:.3f}")
+        h_entry = tk.Entry(body, textvariable=self._h_var,
+                           width=22, font=FB,
+                           bg=BG3, fg=TEXT, insertbackground=TEXT,
+                           relief="flat", bd=0,
+                           highlightbackground=A, highlightthickness=1)
+        h_entry.pack(fill="x", ipady=4, pady=(2, 0))
+        Tooltip(h_entry, "Eye height in metres. "
+                         "Accepts metres (1.65) or feet/inches (5'5\").")
+
+        self._err = tk.Label(body, text="", font=FS, bg=BG, fg=ERR)
+        self._err.pack(anchor="w", pady=(4, 0))
+
+        # Buttons
+        tk.Frame(self.win, bg=A, height=1).pack(fill="x")
+        br = tk.Frame(self.win, bg=BG)
+        br.pack(fill="x", padx=20, pady=10)
+        tk.Button(br, text="Save",
+                  command=self._save,
+                  font=FB, bg=A, fg=TEXT,
+                  activebackground=A2, activeforeground=TEXT,
+                  relief="flat", padx=14, pady=4, cursor="hand2").pack(side="left")
+        tk.Button(br, text="Cancel",
+                  command=self.win.destroy,
+                  font=FB, bg=BG3, fg=DIM,
+                  activebackground=BG4, activeforeground=TEXT,
+                  relief="flat", padx=14, pady=4, cursor="hand2").pack(side="left", padx=8)
+
+        # Bindings
+        for e in (name_entry, h_entry):
+            e.bind("<Return>",   lambda _: self._save())
+            e.bind("<KP_Enter>", lambda _: self._save())
+            e.bind("<Escape>",   lambda _: self.win.destroy())
+
+        # Size and position
+        self.win.update_idletasks()
+        w = self.win.winfo_reqwidth()
+        h = self.win.winfo_reqheight()
+        x = px + (pw - w) // 2
+        y = py + (ph - h) // 2
+        self.win.geometry(f"{w}x{h}+{x}+{y}")
+        name_entry.focus_set()
+        name_entry.select_range(0, "end")
+
+    def _save(self):
+        name = self._name_var.get().strip()
+        if not name:
+            self._err.config(text="Name cannot be empty.")
+            return
+        # Re-use QuickInputDialog parser for height
+        h = QuickInputDialog._parse(self._h_var.get())
+        if h is None or h <= 0:
+            self._err.config(text="Enter a valid height (e.g. 1.65 or 5'5\").")
+            return
+        h = _clamp(h, ABS_MIN, ABS_MAX)
+        self._on_save(name, h)
+        self.win.destroy()
 
 
 # ─── Quick height input dialog ────────────────────────────────────────────────
@@ -1711,7 +1820,8 @@ class ScalerApp:
 
         # OSCQuery manager (optional — degrades gracefully)
         self._oscq = OSCQueryManager(
-            on_vrc_found=self._on_vrc_oscquery_found,
+            on_vrc_found=lambda ip, port: self.root.after(
+                0, lambda: self._on_vrc_oscquery_found(ip, port)),
             on_status=lambda msg, ok: self.root.after(0, lambda: self._status(msg, ok)),
         )
 
@@ -1935,6 +2045,25 @@ class ScalerApp:
             b.grid(row=i//4, column=i%4, padx=2, pady=2, sticky="ew")
             Tooltip(b, f"Set eye height to {h:.2f} m  ({_imp(h)}).")
         for c in range(4): pf.columnconfigure(c, weight=1)
+
+        tk.Frame(RIGHT, bg=A2, height=1).pack(fill="x", pady=(10,6))
+
+        # ── Custom presets ────────────────────────────────────────────────
+        cust_hdr = tk.Frame(RIGHT, bg=BG); cust_hdr.pack(fill="x")
+        tk.Label(cust_hdr, text="Custom Presets", font=FH, bg=BG, fg=TEXT).pack(side="left")
+        add_btn = tk.Button(cust_hdr, text="＋",
+                            command=self._add_custom_preset,
+                            font=("Segoe UI", 11, "bold"),
+                            bg=BG3, fg=OK,
+                            activebackground=BG4, activeforeground=OK,
+                            relief="flat", padx=6, pady=0, cursor="hand2")
+        add_btn.pack(side="right")
+        Tooltip(add_btn, "Add a new custom preset with a name and height of your choice.")
+
+        # Container that _rebuild_custom_presets will repopulate
+        self._custom_frame = tk.Frame(RIGHT, bg=BG)
+        self._custom_frame.pack(fill="x", pady=4)
+        self._rebuild_custom_presets()
 
         tk.Frame(RIGHT, bg=A2, height=1).pack(fill="x", pady=(10,6))
         tk.Label(RIGHT, text="World / Udon Limits", font=FH, bg=BG, fg=TEXT).pack(anchor="w")
@@ -2337,6 +2466,94 @@ class ScalerApp:
         self._send(h)
 
     def _apply_default(self): self._set(self.cfg["default_height"])
+
+    # ── Custom presets ────────────────────────────────────────────────────────
+
+    def _rebuild_custom_presets(self):
+        """Clear and redraw the custom presets grid from cfg['custom_presets']."""
+        for w in self._custom_frame.winfo_children():
+            w.destroy()
+
+        presets: list[dict] = self.cfg.get("custom_presets", [])
+
+        if not presets:
+            tk.Label(self._custom_frame,
+                     text="No custom presets yet.\nClick ＋ to add one.",
+                     font=FS, bg=BG, fg=DIM, justify="center").pack(pady=6)
+            return
+
+        for i, p in enumerate(presets):
+            name   = p.get("name", "?")
+            height = float(p.get("height", 1.65))
+            col, row = i % 4, i // 4
+
+            # Compact two-line label: name on top, height below
+            label = f"{name}\n{height:.2f} m"
+            b = tk.Button(self._custom_frame,
+                          text=label,
+                          command=lambda h=height: self._set(h),
+                          font=("Segoe UI", 9), bg=BG4, fg=TEXT,
+                          activebackground=A, activeforeground=TEXT,
+                          relief="flat", padx=4, pady=5, width=9, cursor="hand2")
+            b.grid(row=row, column=col, padx=2, pady=2, sticky="ew")
+
+            Tooltip(b, f"{name}\n{height:.3f} m  ({_imp(height)})\n\n"
+                       "Left-click to apply.\nRight-click for edit / delete options.")
+
+            # Right-click context menu
+            b.bind("<Button-3>",
+                   lambda e, idx=i: self._custom_preset_menu(e, idx))
+
+        for c in range(4):
+            self._custom_frame.columnconfigure(c, weight=1)
+
+    def _custom_preset_menu(self, event, index: int):
+        menu = tk.Menu(self.root, tearoff=0,
+                       bg=BG3, fg=TEXT, activebackground=A,
+                       activeforeground=TEXT, relief="flat",
+                       font=FB, bd=0)
+        menu.add_command(label="✏  Edit",
+                         command=lambda: self._edit_custom_preset(index))
+        menu.add_separator()
+        menu.add_command(label="🗑  Delete",
+                         command=lambda: self._delete_custom_preset(index),
+                         foreground=ERR, activeforeground=ERR)
+        menu.tk_popup(event.x_root, event.y_root)
+
+    def _add_custom_preset(self):
+        def on_save(name: str, height: float):
+            self.cfg.setdefault("custom_presets", []).append(
+                {"name": name, "height": height})
+            _save(self.cfg)
+            self._rebuild_custom_presets()
+        PresetEditorDialog(self.root, on_save,
+                           initial_height=self._h)
+
+    def _edit_custom_preset(self, index: int):
+        presets = self.cfg.get("custom_presets", [])
+        if index >= len(presets):
+            return
+        p = presets[index]
+        def on_save(name: str, height: float):
+            presets[index] = {"name": name, "height": height}
+            _save(self.cfg)
+            self._rebuild_custom_presets()
+        PresetEditorDialog(self.root, on_save,
+                           initial_name=p.get("name", ""),
+                           initial_height=float(p.get("height", 1.65)))
+
+    def _delete_custom_preset(self, index: int):
+        presets = self.cfg.get("custom_presets", [])
+        if index >= len(presets):
+            return
+        name = presets[index].get("name", "this preset")
+        if tk.messagebox.askyesno(
+                "Delete Preset",
+                f"Delete \"{name}\"?",
+                parent=self.root):
+            presets.pop(index)
+            _save(self.cfg)
+            self._rebuild_custom_presets()
 
     def _show_quick_input(self):
         """Open the floating quick-input dialog (guard against stacking)."""
