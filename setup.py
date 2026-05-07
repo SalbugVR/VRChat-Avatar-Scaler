@@ -34,7 +34,7 @@ bdist_msi_options = {
     "add_to_path": True,
     "data": msi_data,
     "upgrade_code": "{bc9feaf4-f09f-46a0-ae41-9a4328756325}",
-    "output_name": "VRChatAvatarScaler",
+    "output_name": "VRChatAvatarScaler.msi",
 }
 bdist_appimage_options = {
     "target_name": "VRChatAvatarScaler.AppImage",
