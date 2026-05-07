@@ -134,7 +134,7 @@ OSC is the feature that lets external tools like this one talk to VRChat.
 
 The main control is a horizontal slider that covers VRChat's full supported range — **0.1 m to 100 m** — using a logarithmic scale. This means small heights (like 0.2 m) are just as easy to fine-tune as large ones (like 50 m). The slider gets more precise as you make the window wider.
 
-**Tick marks** are drawn below the slider at key heights (0.1 m, 0.5 m, 1 m, 2 m, 5 m, 10 m, 50 m, 100 m and more) so you can see at a glance where you are.
+**Tick marks** are drawn below the slider at key heights so you can see at a glance where you are.
 
 If the current world has set height limits via Udon scripting, **red markers** appear on the slider showing the allowed range, and the zones outside those limits are shaded. If the world has fully disabled scaling, the slider fades out and is blocked until you leave.
 
@@ -142,7 +142,7 @@ To go beyond VRChat's supported range, you'll need to manually input your desire
 
 If you go beyond VRChat's supported range of 0.1 m - 100 m, you'll be met with a caution message.
 
-> ⚠️ Do **NOT** submit bug reports or contact VRChat Support if issues are encountered while operating outside of the supported range.
+> ⚠️ **DO NOT** submit bug reports or contact VRChat Support if issues are encountered while operating outside of the supported range.
 
 ### Exact value entry
 
@@ -310,6 +310,7 @@ Only one of these can be active at a time. If neither is enabled, VRChat's scale
 | Setting | Description |
 |---|---|
 | Run on Windows startup | Creates a startup shortcut so the scaler launches when you log in. Unticking removes the shortcut. |
+| Hide to tray when closing window | Changes the behaviour of the × button to whether it'll close or hide the application. |
 | Auto-launch when VRChat starts | Brings the scaler window to the front automatically when VRChat is detected. |
 | Auto-close when VRChat exits | Exits the scaler 1.5 seconds after VRChat closes. |
 | Start minimized to tray | Hides the window on launch; access via the tray icon. |

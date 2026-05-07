@@ -98,10 +98,16 @@ if _instance_lock is None:
 # ─── Standard imports ─────────────────────────────────────────────────────────
 import json, math, os, sys, threading, time
 import ctypes as _ctypes
+import urllib.request as _urllib
 
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
+
+# ─── Version ──────────────────────────────────────────────────────────────────
+APP_VERSION       = "0.2.3"
+_RELEASES_API_URL = "https://api.github.com/repos/SalbugVR/VRChat-Avatar-Scaler/releases/latest"
+_RELEASES_PAGE    = "https://github.com/SalbugVR/VRChat-Avatar-Scaler/releases"
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 _CFG = Path(__file__).with_name("scaler_config.json")
@@ -126,6 +132,7 @@ _DEFAULTS = {
     "kb_coarse_up":             "ctrl+alt+shift+up",
     "kb_coarse_down":           "ctrl+alt+shift+down",
     "kb_apply_default":         "ctrl+alt+home",
+    "kb_quick_input":           "ctrl+alt+i",
     "vrc_ip":                   "127.0.0.1",
     "send_port":                9000,
     "recv_port":                9001,
@@ -143,6 +150,25 @@ def _load() -> dict:
 def _save(cfg: dict):
     try: _CFG.write_text(json.dumps(cfg, indent=2), "utf-8")
     except Exception: pass
+
+
+def _fetch_latest_version() -> str | None:
+    """
+    Query GitHub releases API for the latest release tag.
+    Returns the tag string (e.g. 'v0.3.0') or None on any failure.
+    Runs in a background thread — never blocks the UI.
+    """
+    try:
+        req = _urllib.Request(
+            _RELEASES_API_URL,
+            headers={"User-Agent": f"VRChatAvatarScaler/{APP_VERSION}",
+                     "Accept":     "application/vnd.github+json"}
+        )
+        with _urllib.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return data.get("tag_name")
+    except Exception:
+        return None
 
 
 # ─── Windows startup shortcut management ─────────────────────────────────────
@@ -508,6 +534,7 @@ class KeyboardInput:
         "coarse_up":     "ctrl+alt+shift+up",
         "coarse_down":   "ctrl+alt+shift+down",
         "apply_default": "ctrl+alt+home",
+        "quick_input":   "ctrl+alt+i",
     }
     CFG_KEYS = {
         "fine_up":       "kb_fine_up",
@@ -515,6 +542,7 @@ class KeyboardInput:
         "coarse_up":     "kb_coarse_up",
         "coarse_down":   "kb_coarse_down",
         "apply_default": "kb_apply_default",
+        "quick_input":   "kb_quick_input",
     }
 
     def __init__(self, schedule, callbacks: dict):
@@ -677,6 +705,7 @@ _ACTION_LABELS = [
     ("coarse_up",     "Scale up  +10%"),
     ("coarse_down",   "Scale down  −10%"),
     ("apply_default", "Apply default height"),
+    ("quick_input",   "Quick height input"),
 ]
 
 def _fmt_hotkey(raw: str) -> str:
@@ -873,6 +902,148 @@ class HotkeyRecorder(tk.Frame):
         self._cfg[cfg_key] = default
         self._rows[action]["lv"].set(_fmt_hotkey(default))
         self._rows[action]["lbl"].config(fg=AHL)
+
+
+
+# ─── Quick height input dialog ────────────────────────────────────────────────
+
+class QuickInputDialog:
+    """
+    Small borderless always-on-top entry window for rapid height input.
+    Triggered by the quick_input hotkey while VRChat is focused.
+
+    • Shows the current height as a pre-selected placeholder.
+    • Enter  — parses and applies the typed value, then closes.
+    • Escape — closes without applying.
+    • Focus loss — closes without applying.
+    • Accepts values in metres (e.g. "1.5", "1.5m") or
+      imperial shorthand (e.g. "5'11" or "5ft11in").
+    """
+
+    def __init__(self, root: tk.Tk, current_h: float, on_apply):
+        self._on_apply = on_apply
+
+        win = tk.Toplevel(root)
+        self.win = win
+        win.wm_overrideredirect(True)
+        win.wm_attributes("-topmost", True)
+        win.wm_attributes("-alpha", 0.96)
+        win.configure(bg=A)   # accent-colour 1 px border
+
+        inner = tk.Frame(win, bg=BG, padx=14, pady=10)
+        inner.pack(padx=1, pady=1)
+
+        # Label row
+        lbl_row = tk.Frame(inner, bg=BG)
+        lbl_row.pack(fill="x", pady=(0, 6))
+        tk.Label(lbl_row, text="⬡  Quick Height Input",
+                 font=FH, bg=BG, fg=AHL).pack(side="left")
+        tk.Label(lbl_row, text="  Enter = apply   Esc = cancel",
+                 font=FS, bg=BG, fg=DIM).pack(side="right")
+
+        # Entry
+        self._var = tk.StringVar(value=f"{current_h:.3f}")
+        entry = tk.Entry(inner, textvariable=self._var,
+                         width=16, font=("Segoe UI", 18, "bold"),
+                         bg=BG2, fg=AHL, insertbackground=AHL,
+                         relief="flat", bd=0,
+                         highlightbackground=A, highlightthickness=1,
+                         justify="center")
+        entry.pack(fill="x", ipady=6)
+
+        # Hint
+        self._hint = tk.Label(inner, text="metres  •  e.g.  1.65  or  5'9\"",
+                              font=FS, bg=BG, fg=DIM)
+        self._hint.pack(pady=(5, 0))
+
+        # Position: centred horizontally near the top of the screen
+        win.update_idletasks()
+        w  = win.winfo_reqwidth()
+        h  = win.winfo_reqheight()
+        sw = root.winfo_screenwidth()
+        x  = (sw - w) // 2
+        y  = 60
+        win.geometry(f"+{x}+{y}")
+
+        # Bindings
+        entry.bind("<Return>",    self._submit)
+        entry.bind("<KP_Enter>",  self._submit)
+        entry.bind("<Escape>",    self._cancel)
+        win.bind("<FocusOut>",    self._on_focus_out)
+        entry.focus_force()
+        entry.select_range(0, "end")
+
+    # ── input parsing ─────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _parse(raw: str) -> float | None:
+        """
+        Try to parse a height value from a human-typed string.
+        Handles:
+          • plain metres:  "1.65", "1.65m"
+          • feet/inches:   "5'9", "5'9\"", "5ft 9in", "5ft9"
+          • inches only:   "69in"
+        Returns metres as a float, or None if unparsable.
+        """
+        import re
+        s = raw.strip().lower().replace(",", ".")
+
+        # feet + inches: 5'9, 5'9", 5ft9in, 5 ft 9 in, etc.
+        m = re.fullmatch(
+            r"""(\d+(?:\.\d+)?)\s*(?:ft|feet|'|′)\s*"""
+            r"""(\d+(?:\.\d+)?)\s*(?:in|inch(?:es)?|"|″)?""",
+            s)
+        if m:
+            feet, inches = float(m.group(1)), float(m.group(2))
+            return (feet * 12 + inches) * 0.0254
+
+        # feet only: 5ft, 5'
+        m = re.fullmatch(r"""(\d+(?:\.\d+)?)\s*(?:ft|feet|'|′)""", s)
+        if m:
+            return float(m.group(1)) * 12 * 0.0254
+
+        # inches only: 69in, 69"
+        m = re.fullmatch(r"""(\d+(?:\.\d+)?)\s*(?:in|inch(?:es)?|"|″)""", s)
+        if m:
+            return float(m.group(1)) * 0.0254
+
+        # metres: 1.65, 1.65m
+        m = re.fullmatch(r"""(\d+(?:\.\d+)?)\s*m?""", s)
+        if m:
+            return float(m.group(1))
+
+        return None
+
+    # ── actions ───────────────────────────────────────────────────────────────
+
+    def _submit(self, _=None):
+        val = self._parse(self._var.get())
+        if val is None:
+            # Flash the hint red briefly to signal bad input
+            self._hint.config(text="⚠  Could not parse — try e.g.  1.65  or  5'9\"",
+                              fg=ERR)
+            self.win.after(1800, lambda: self._hint.config(
+                text="metres  •  e.g.  1.65  or  5'9\"", fg=DIM))
+            return
+        self._on_apply(val)
+        self.win.destroy()
+
+    def _cancel(self, _=None):
+        self.win.destroy()
+
+    def _on_focus_out(self, event):
+        # Only close if focus moved completely outside the dialog
+        if event.widget == self.win:
+            self.win.after(50, self._check_focus)
+
+    def _check_focus(self):
+        try:
+            focused = self.win.focus_get()
+            if focused is None or str(focused) not in str(self.win):
+                self.win.destroy()
+        except Exception:
+            try: self.win.destroy()
+            except Exception: pass
 
 
 # ─── Range warning dialog ─────────────────────────────────────────────────────
@@ -1379,12 +1550,28 @@ class HeightOverlay:
 
     def _drag_move(self, e):
         if self._win:
-            self._win.geometry(f"+{e.x_root - self._drag_ox}+{e.y_root - self._drag_oy}")
+            x = e.x_root - self._drag_ox
+            y = e.y_root - self._drag_oy
+            x, y = self._clamped(x, y)
+            self._win.geometry(f"+{x}+{y}")
 
     def _drag_end(self, e):
         if self._win:
-            self._cfg["overlay_x"] = self._win.winfo_x()
-            self._cfg["overlay_y"] = self._win.winfo_y()
+            x, y = self._clamped(self._win.winfo_x(), self._win.winfo_y())
+            self._win.geometry(f"+{x}+{y}")
+            self._cfg["overlay_x"] = x
+            self._cfg["overlay_y"] = y
+
+    def _clamped(self, x: int, y: int) -> tuple[int, int]:
+        """Clamp overlay position so it stays fully within the screen bounds."""
+        self._win.update_idletasks()
+        sw = self._root.winfo_screenwidth()
+        sh = self._root.winfo_screenheight()
+        ww = self._win.winfo_width()
+        wh = self._win.winfo_height()
+        x  = _clamp(x, 0, max(0, sw - ww))
+        y  = _clamp(y, 0, max(0, sh - wh))
+        return int(x), int(y)
 
     # ── focus poll ────────────────────────────────────────────────────────────
 
@@ -1517,9 +1704,10 @@ class ScalerApp:
         self._udon_min:  float | None  = None
         self._udon_max:  float | None  = None
         self._locked:    bool          = False
-        self._svr_on:    bool          = False   # server started
-        self.tray:       pystray.Icon | None = None
-        self._overlay:   HeightOverlay | None = None
+        self._svr_on:      bool          = False   # server started
+        self.tray:         pystray.Icon | None = None
+        self._overlay:     HeightOverlay | None = None
+        self._quick_input: QuickInputDialog | None = None
 
         # OSCQuery manager (optional — degrades gracefully)
         self._oscq = OSCQueryManager(
@@ -1536,6 +1724,7 @@ class ScalerApp:
                 "coarse_up":     lambda: self._set(self._h * 1.10),
                 "coarse_down":   lambda: self._set(self._h * 0.90),
                 "apply_default": self._apply_default,
+                "quick_input":   self._show_quick_input,
             },
         )
 
@@ -1576,6 +1765,7 @@ class ScalerApp:
         # Start input handlers and overlay after main loop is ready
         root.after(300, self._start_inputs)
         root.after(400, self._start_overlay)
+        root.after(5000, self._start_update_check)   # delay so startup feels snappy
 
     # ── Build UI ──────────────────────────────────────────────────────────────
     def _build(self):
@@ -1610,8 +1800,24 @@ class ScalerApp:
                 "The overlay is only visible when VRChat is the active window.\n"
                 "Drag it to reposition; click ✕ on the overlay to hide it.", wrap=280)
 
+        # ── Update notification banner (hidden until an update is found) ───
+        self._update_bar = tk.Frame(self.root, bg="#1a2a1a")
+        # Not packed yet — shown only when update is available
+        ub_inner = tk.Frame(self._update_bar, bg="#1a2a1a")
+        ub_inner.pack(padx=12, pady=5, fill="x")
+        self._update_lbl = tk.Label(ub_inner,
+            text="", font=FS, bg="#1a2a1a", fg=OK, cursor="hand2")
+        self._update_lbl.pack(side="left")
+        self._update_lbl.bind("<Button-1>", lambda _: self._open_releases())
+        tk.Button(ub_inner, text="✕", font=FS,
+                  bg="#1a2a1a", fg=DIM, relief="flat",
+                  activebackground="#1a2a1a", activeforeground=TEXT,
+                  cursor="hand2",
+                  command=self._dismiss_update_bar).pack(side="right")
+
         # ── VRChat status bar (full width) ────────────────────────────────
         vf = tk.Frame(self.root, bg=BG2)
+        self._vrc_frame = vf
         vf.pack(fill="x")
         vf.configure(highlightbackground=BG3, highlightthickness=1)
         vi = tk.Frame(vf, bg=BG2)
@@ -1820,6 +2026,40 @@ class ScalerApp:
     def _start_overlay(self):
         self._overlay = HeightOverlay(self.root, self.cfg)
         self._update_overlay_btn()
+
+    # ── Update check ──────────────────────────────────────────────────────────
+
+    def _start_update_check(self):
+        threading.Thread(target=self._run_update_check, daemon=True).start()
+
+    def _run_update_check(self):
+        tag = _fetch_latest_version()
+        if not tag:
+            return
+        # Normalise — strip leading 'v' for comparison
+        latest = tag.lstrip("v").strip()
+        current = APP_VERSION.lstrip("v").strip()
+        if latest != current:
+            try:
+                from packaging.version import Version
+                is_newer = Version(latest) > Version(current)
+            except Exception:
+                # packaging not available — simple string compare
+                is_newer = latest != current
+            if is_newer:
+                self.root.after(0, lambda: self._show_update_banner(tag))
+
+    def _show_update_banner(self, tag: str):
+        self._update_lbl.config(
+            text=f"🔔  Version {tag} is available — click here to download")
+        self._update_bar.pack(fill="x", before=self._vrc_frame)
+
+    def _dismiss_update_bar(self):
+        self._update_bar.pack_forget()
+
+    def _open_releases(self):
+        import webbrowser
+        webbrowser.open(_RELEASES_PAGE)
 
     def _toggle_overlay(self):
         if self._overlay:
@@ -2097,6 +2337,28 @@ class ScalerApp:
         self._send(h)
 
     def _apply_default(self): self._set(self.cfg["default_height"])
+
+    def _show_quick_input(self):
+        """Open the floating quick-input dialog (guard against stacking)."""
+        # If already open, just bring it to the front
+        if self._quick_input is not None:
+            try:
+                self._quick_input.win.lift()
+                self._quick_input.win.focus_force()
+                return
+            except Exception:
+                self._quick_input = None
+
+        def on_apply(val: float):
+            self._quick_input = None
+            self._set(val)
+
+        self._quick_input = QuickInputDialog(
+            self.root, self._h, on_apply)
+        # Clear reference when dialog is closed by any means
+        self._quick_input.win.bind(
+            "<Destroy>",
+            lambda _: setattr(self, "_quick_input", None))
 
     def _make_default(self):
         self.cfg["default_height"] = self._h
