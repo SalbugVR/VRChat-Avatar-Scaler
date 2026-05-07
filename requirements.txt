@@ -1,0 +1,8 @@
+python-osc
+pystray
+Pillow
+psutil
+pynput
+zeroconf
+requests
+git+https://github.com/Hackebein/tinyoscquery.git
