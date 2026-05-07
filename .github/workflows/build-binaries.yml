@@ -36,13 +36,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          pip install -r VRChat-Avatar-Scaler/requirements.txt
+          pip install -r requirements.txt
           pip install cx_Freeze freeze-core
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
-          pip install -r VRChat-Avatar-Scaler/requirements.txt
+          pip install -r requirements.txt
           pip install cx_Freeze freeze-core
 
       # --- Rename ---
