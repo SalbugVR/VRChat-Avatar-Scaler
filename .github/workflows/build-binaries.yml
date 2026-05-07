@@ -1,0 +1,85 @@
+# .github/workflows/build.yml
+name: Build Nuitka Binaries
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # ← opt into Node 24 now
+  
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact-name: VRChat_Avatar_Scaler
+            output-ext: ".AppImage"
+          - os: windows-latest
+            artifact-name: VRChat_Avatar_Scaler
+            output-ext: ".msi"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+
+      # --- Python +  CX_Freeze ---
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          pip install -r OSCLeash/requirements.txt
+          pip install cx_Freeze freeze-core
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          pip install -r OSCLeash/requirements.txt
+          pip install cx_Freeze freeze-core
+
+      # --- Rename ---
+      - name: Build with CX_Freeze (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mv vrchat_avatar_scaler.pyw vrchat_avatar_scaler.py
+        
+      - name: Build with CX_Freeze (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          move vrchat_avatar_scaler.pyw vrchat_avatar_scaler.py
+
+      # --- Build ---
+      - name: Build with CX_Freeze (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python setup.py bdinst_appimage \
+            vrchat_avatar_scaler.py
+        
+      - name: Build with CX_Freeze (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          python setup.py bdinst_msi ^
+            vrchat_avatar_scaler.py
+
+      # --- Upload ---
+      - name: Upload binary
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: dist/VRChatAvatarScaler${{ matrix.output-ext }}
+          retention-days: 30
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/VRChatAvatarScaler${{ matrix.output-ext }}
