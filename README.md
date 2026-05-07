@@ -407,7 +407,6 @@ Settings are saved to `scaler_config.json` in the same folder as the script. You
 | `vrchat_avatar_scaler.pyw` | The main application. |
 | `Install.bat` | One-click installer — run this first. |
 | `Launch Scaler (Silent).vbs` | Launches the app without a console window. Use this for daily use and shortcuts. |
-| `Cleanup.bat` | Removes leftover startup entries from older versions. |
 | `scaler_config.json` | Created automatically on first run. Stores all settings and your last-used height. Delete to reset to defaults. |
 
 ### Compiled release
