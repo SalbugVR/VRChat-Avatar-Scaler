@@ -50,10 +50,19 @@ jobs:
           sudo apt-get install -y \
             python3-gi python3-gi-cairo \
             gir1.2-gtk-3.0 \
-            libayatana-appindicator3-dev \
-            libgirepository1.0-dev
+            gir1.2-ayatanaappindicator3-0.1 \
+            libayatana-appindicator3-1 \
+            libgirepository1.0-dev \
+            xvfb
           pip install -r requirements.txt
           pip install cx_Freeze freeze-core
+
+        - name: Set up virtual display (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb
+          Xvfb :99 -screen 0 1024x768x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
 
       # --- Rename ---
       - name: Rename File so CX_Freeze works (Linux)
