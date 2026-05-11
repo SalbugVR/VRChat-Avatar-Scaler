@@ -78,6 +78,8 @@ jobs:
       # --- Build ---
       - name: Build with CX_Freeze (Linux)
         if: runner.os == 'Linux'
+        env:
+          DISPLAY: ':99'
         run: |
           python setup.py bdist_appimage
         
