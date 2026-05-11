@@ -43,7 +43,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install -r requirements.txt
-          pip install cx_Freeze freeze-core
+          pip install cx_Freeze freeze-core PyGObject
 
       - name: Virtual display
         run: |
@@ -54,6 +54,7 @@ jobs:
         run: |
           echo "=== pystray ==="
           python -c "import pystray; print('ok:', pystray.__file__)"
+          python -c "import gi; gi.require_version('AyatanaAppIndicator3', '0.1'); from gi.repository import AyatanaAppIndicator3; print('appindicator ok')"
 
           echo "=== AppIndicator ==="
           python -c "
