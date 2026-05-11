@@ -42,7 +42,6 @@ jobs:
           pip install -r requirements.txt
           pip install cx_Freeze freeze-core
 
-
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -57,7 +56,7 @@ jobs:
           pip install -r requirements.txt
           pip install cx_Freeze freeze-core
 
-        - name: Set up virtual display (Linux)
+      - name: Set up virtual display (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get install -y xvfb
