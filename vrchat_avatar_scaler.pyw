@@ -1079,8 +1079,19 @@ class QuickInputDialog:
         entry.bind("<KP_Enter>",  self._submit)
         entry.bind("<Escape>",    self._cancel)
         win.bind("<FocusOut>",    self._on_focus_out)
-        entry.focus_force()
-        entry.select_range(0, "end")
+
+        # Defer focus — VRChat (especially fullscreen) holds OS focus tightly.
+        # A short delay gives the window manager time to actually render the
+        # Toplevel before we attempt to steal focus.
+        def _grab():
+            try:
+                win.lift()
+                win.focus_force()
+                entry.focus_force()
+                entry.select_range(0, "end")
+            except Exception:
+                pass
+        win.after(80, _grab)
 
     # ── input parsing ─────────────────────────────────────────────────────────
 
@@ -2034,9 +2045,14 @@ class ScalerApp:
 
         # ════ RIGHT PANEL ════════════════════════════════════════════════
 
-        self._builtin_preset_hdr = tk.Label(RIGHT, text="Presets", font=FH, bg=BG, fg=TEXT)
-        self._builtin_preset_hdr.pack(anchor="w")
-        self._builtin_preset_frame = tk.Frame(RIGHT, bg=BG)
+        # Container for built-in presets — pack/pack_forget this single frame
+        # to cleanly hide/show everything when custom presets are in use.
+        self._builtin_preset_container = tk.Frame(RIGHT, bg=BG)
+        self._builtin_preset_container.pack(fill="x")
+
+        tk.Label(self._builtin_preset_container, text="Presets",
+                 font=FH, bg=BG, fg=TEXT).pack(anchor="w")
+        self._builtin_preset_frame = tk.Frame(self._builtin_preset_container, bg=BG)
         self._builtin_preset_frame.pack(fill="x", pady=4)
         for i, (label, h) in enumerate(PRESETS):
             b = tk.Button(self._builtin_preset_frame, text=label,
@@ -2047,12 +2063,12 @@ class ScalerApp:
             b.grid(row=i//4, column=i%4, padx=2, pady=2, sticky="ew")
             Tooltip(b, f"Set eye height to {h:.2f} m  ({_imp(h)}).")
         for c in range(4): self._builtin_preset_frame.columnconfigure(c, weight=1)
-
-        self._builtin_sep = tk.Frame(RIGHT, bg=A2, height=1)
-        self._builtin_sep.pack(fill="x", pady=(10,6))
+        tk.Frame(self._builtin_preset_container, bg=A2, height=1).pack(fill="x", pady=(10, 6))
 
         # ── Custom presets ────────────────────────────────────────────────
-        cust_hdr = tk.Frame(RIGHT, bg=BG); cust_hdr.pack(fill="x")
+        self._cust_section = tk.Frame(RIGHT, bg=BG)
+        self._cust_section.pack(fill="x")
+        cust_hdr = tk.Frame(self._cust_section, bg=BG); cust_hdr.pack(fill="x")
         tk.Label(cust_hdr, text="Custom Presets", font=FH, bg=BG, fg=TEXT).pack(side="left")
         add_btn = tk.Button(cust_hdr, text="＋",
                             command=self._add_custom_preset,
@@ -2064,7 +2080,7 @@ class ScalerApp:
         Tooltip(add_btn, "Add a new custom preset with a name and height of your choice.")
 
         # Container that _rebuild_custom_presets will repopulate
-        self._custom_frame = tk.Frame(RIGHT, bg=BG)
+        self._custom_frame = tk.Frame(self._cust_section, bg=BG)
         self._custom_frame.pack(fill="x", pady=4)
         self._rebuild_custom_presets()
 
@@ -2289,6 +2305,9 @@ class ScalerApp:
             self._status("VRChat detected — OSC ready", True)
             if self.cfg.get("auto_launch_with_vrchat"):
                 self._show_window()
+            # Re-advertise via OSCQuery so VRChat picks up the scaler at its startup
+            if _OSCQ and self.cfg.get("oscquery_enabled", True):
+                self._oscq.restart(self.cfg, self.cfg["recv_port"])
         else:
             self._vrc_dot.config(fg=ERR)
             self._vrc_txt.config(text="Not running", fg=ERR)
@@ -2480,15 +2499,11 @@ class ScalerApp:
 
         presets: list[dict] = self.cfg.get("custom_presets", [])
 
-        # Hide built-in presets when custom presets are defined; restore them when not
+        # Toggle the entire built-in container — single pack/pack_forget, no ordering issues
         if presets:
-            self._builtin_preset_hdr.pack_forget()
-            self._builtin_preset_frame.pack_forget()
-            self._builtin_sep.pack_forget()
+            self._builtin_preset_container.pack_forget()
         else:
-            self._builtin_preset_hdr.pack(anchor="w", before=self._builtin_preset_frame)
-            self._builtin_preset_frame.pack(fill="x", pady=4, before=self._builtin_sep)
-            self._builtin_sep.pack(fill="x", pady=(10, 6))
+            self._builtin_preset_container.pack(fill="x", before=self._cust_section)
 
         if not presets:
             tk.Label(self._custom_frame,
