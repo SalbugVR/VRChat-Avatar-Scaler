@@ -1,0 +1,98 @@
+# .github/workflows/debug-appimage.yml
+name: Debug AppImage Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-gi python3-gi-cairo \
+            gir1.2-gtk-3.0 \
+            gir1.2-ayatanaappindicator3-0.1 \
+            libayatana-appindicator3-1 \
+            libgirepository1.0-dev \
+            libgirepository-1.0-0 \
+            libglib2.0-0 \
+            libdbus-1-3 \
+            libdbus-glib-1-2 \
+            glib-networking \
+            libcairo2 \
+            libcairo-gobject2 \
+            libpango-1.0-0 \
+            libpangocairo-1.0-0 \
+            libgdk-pixbuf-2.0-0 \
+            libgtk-3-0 \
+            libatk1.0-0 \
+            xvfb
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install cx_Freeze freeze-core
+
+      - name: Virtual display
+        run: |
+          Xvfb :99 -screen 0 1024x768x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+
+      - name: Debug library availability
+        run: |
+          echo "=== pystray ==="
+          python -c "import pystray; print('ok:', pystray.__file__)"
+
+          echo "=== AppIndicator ==="
+          python -c "
+          import gi
+          gi.require_version('AyatanaAppIndicator3', '0.1')
+          from gi.repository import AyatanaAppIndicator3
+          print('appindicator ok')
+          " || echo "FAILED"
+
+          echo "=== libayatana .so files ==="
+          find /usr/lib -name "libayatana*" 2>/dev/null || echo "none found"
+
+          echo "=== AyatanaAppIndicator typelib ==="
+          find /usr/lib -name "AyatanaAppIndicator*" 2>/dev/null || echo "none found"
+
+          echo "=== GI typelib dir ==="
+          find /usr/lib -name "girepository-1.0" -type d 2>/dev/null || echo "none found"
+
+          echo "=== gi module ==="
+          python -c "import gi; print('gi ok:', gi.__file__)"
+
+      - name: Rename .pyw to .py
+        run: mv vrchat_avatar_scaler.pyw vrchat_avatar_scaler.py
+
+      - name: Build AppImage
+        env:
+	  DISPLAY: ":99"
+        run: python setup.py bdist_appimage
+
+      - name: Show dist contents and size
+        run: |
+          echo "=== dist/ ==="
+          ls -lh dist/
+          echo "=== build/ top level ==="
+          du -sh build/*/
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VRChatAvatarScaler-debug
+          path: dist/VRChatAvatarScaler.AppImage
+          retention-days: 7
