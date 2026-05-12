@@ -112,7 +112,7 @@ import tkinter as tk
 from tkinter import ttk
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION       = "0.2.3"
+APP_VERSION       = "0.3.0"
 _RELEASES_API_URL = "https://api.github.com/repos/SalbugVR/VRChat-Avatar-Scaler/releases/latest"
 _RELEASES_PAGE    = "https://github.com/SalbugVR/VRChat-Avatar-Scaler/releases"
 
@@ -2184,18 +2184,26 @@ class ScalerApp:
         tag = _fetch_latest_version()
         if not tag:
             return
-        # Normalise — strip leading 'v' for comparison
-        latest = tag.lstrip("v").strip()
+        latest  = tag.lstrip("v").strip()
         current = APP_VERSION.lstrip("v").strip()
-        if latest != current:
+        if latest == current:
+            return   # already on latest
+
+        # Compare as version tuples so "0.10.0" > "0.9.0" correctly
+        def _ver(s):
             try:
-                from packaging.version import Version
-                is_newer = Version(latest) > Version(current)
+                return tuple(int(x) for x in s.split("."))
             except Exception:
-                # packaging not available — simple string compare
-                is_newer = latest != current
-            if is_newer:
-                self.root.after(0, lambda: self._show_update_banner(tag))
+                return (0,)
+
+        try:
+            from packaging.version import Version
+            is_newer = Version(latest) > Version(current)
+        except Exception:
+            is_newer = _ver(latest) > _ver(current)
+
+        if is_newer:
+            self.root.after(0, lambda: self._show_update_banner(tag))
 
     def _show_update_banner(self, tag: str):
         self._update_lbl.config(
@@ -2305,9 +2313,11 @@ class ScalerApp:
             self._status("VRChat detected — OSC ready", True)
             if self.cfg.get("auto_launch_with_vrchat"):
                 self._show_window()
-            # Re-advertise via OSCQuery so VRChat picks up the scaler at its startup
+            # Re-advertise via OSCQuery after a short delay so the restart
+            # completes while VRChat is still initialising its own OSCQuery scan,
+            # rather than firing before VRChat has started scanning.
             if _OSCQ and self.cfg.get("oscquery_enabled", True):
-                self._oscq.restart(self.cfg, self.cfg["recv_port"])
+                self.root.after(2500, self._restart_oscquery)
         else:
             self._vrc_dot.config(fg=ERR)
             self._vrc_txt.config(text="Not running", fg=ERR)
@@ -2320,6 +2330,10 @@ class ScalerApp:
             self._update_allowed(True)
             if self.cfg.get("auto_close_with_vrchat"):
                 self.root.after(1500, self._quit)
+
+    def _restart_oscquery(self):
+        """Restart the OSCQuery service — called with a delay after VRChat is detected."""
+        self._oscq.restart(self.cfg, self.cfg["recv_port"])
 
     # ── OSC listener ──────────────────────────────────────────────────────────
     def _osc_listen(self):
