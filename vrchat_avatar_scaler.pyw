@@ -1721,6 +1721,9 @@ class OSCQueryManager:
     Falls back gracefully if tinyoscquery is not installed or fails.
     """
     SERVICE_NAME     = "VRChatAvatarScaler"
+    # VRChat advertises itself under this exact service name via OSCQuery.
+    # Must NOT be a substring of SERVICE_NAME to avoid finding ourselves.
+    VRC_SERVICE_NAME = "VRChat-Client"
     DISCOVERY_DELAY  = 2.0    # seconds to wait for mDNS responses
     RETRY_INTERVAL   = 10.0   # seconds between re-discovery attempts
 
@@ -1795,7 +1798,7 @@ class OSCQueryManager:
             try:
                 browser = OSCQueryBrowser()
                 time.sleep(self.DISCOVERY_DELAY)
-                svc = browser.find_service_by_name("VRChat")
+                svc = browser.find_service_by_name(self.VRC_SERVICE_NAME)
                 if svc:
                     client    = OSCQueryClient(svc)
                     host_info = client.get_host_info()
