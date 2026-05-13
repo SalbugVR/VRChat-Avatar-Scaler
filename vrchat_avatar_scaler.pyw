@@ -1921,6 +1921,18 @@ class ScalerApp:
                 "The overlay is only visible when VRChat is the active window.\n"
                 "Drag it to reposition; click ✕ on the overlay to hide it.", wrap=280)
 
+        self._reconnect_btn = tk.Button(tr, text="⟳  Reconnect",
+                                        command=self._manual_oscquery_reconnect,
+                                        font=FS, bg=BG, fg=DIM,
+                                        activebackground=BG2, activeforeground=AHL,
+                                        relief="flat", padx=10, pady=5, cursor="hand2")
+        self._reconnect_btn.pack(side="right", padx=(0, 4))
+        Tooltip(self._reconnect_btn,
+                "Restart the OSCQuery connection to VRChat.\n\n"
+                "Use this if the scaler was launched before VRChat and VRChat "
+                "has not detected it automatically. VRChat should show a HUD "
+                "notification confirming the connection.", wrap=280)
+
         # ── Update notification banner (hidden until an update is found) ───
         self._update_bar = tk.Frame(self.root, bg="#1a2a1a")
         # Not packed yet — shown only when update is available
@@ -2334,6 +2346,16 @@ class ScalerApp:
     def _restart_oscquery(self):
         """Restart the OSCQuery service — called with a delay after VRChat is detected."""
         self._oscq.restart(self.cfg, self.cfg["recv_port"])
+
+    def _manual_oscquery_reconnect(self):
+        """Manual reconnect triggered by the title bar button."""
+        self._reconnect_btn.config(fg=WARN, text="⟳  Reconnecting…")
+        self.root.after(100, self._do_reconnect)
+
+    def _do_reconnect(self):
+        self._oscq.restart(self.cfg, self.cfg["recv_port"])
+        self._reconnect_btn.config(fg=OK, text="⟳  Reconnected")
+        self.root.after(2500, lambda: self._reconnect_btn.config(fg=DIM, text="⟳  Reconnect"))
 
     # ── OSC listener ──────────────────────────────────────────────────────────
     def _osc_listen(self):
