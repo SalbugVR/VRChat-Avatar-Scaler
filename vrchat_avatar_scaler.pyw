@@ -1821,6 +1821,7 @@ class ScalerApp:
         self.cfg   = _load()
 
         self._h:         float         = self.cfg["last_height"]
+        self._intended_h: float        = self.cfg["last_height"]   # user-set height, never overwritten by VRChat echo
         self._vrc_on:    bool          = False
         self._supp:      bool          = False   # slider ↔ entry guard
         self._warned:    bool          = False
@@ -2295,7 +2296,7 @@ class ScalerApp:
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
     def _quit(self):
-        self.cfg["last_height"] = self._h
+        self.cfg["last_height"] = self._intended_h
         _save(self.cfg)
         self._kb_input.stop()
         self._oscq.stop()
@@ -2419,22 +2420,28 @@ class ScalerApp:
             self.root.after(0, lambda: self._update_allowed(allowed))
 
     def _oh_change(self, _, *args):
-        """Avatar or world changed — clear any stale world limits, then re-apply height."""
-        # Reset world-specific state so stale limits from the previous world don't persist
+        """Avatar or world changed — dispatch everything to main thread to avoid
+        race conditions with _oh_height echoes arriving on the same listener thread."""
+        self.root.after(0, self._handle_change)
+
+    def _handle_change(self):
+        """Called on main thread only. Clears stale world state and re-applies height."""
         self._udon_min  = None
         self._udon_max  = None
         self._locked    = False
-        self.root.after(0, lambda: self._update_limits())
-        self.root.after(0, lambda: self._update_allowed(True))
+        self._update_limits()
+        self._update_allowed(True)
 
         if self.cfg.get("retain_on_change"):
-            h = self._h
+            # Use _intended_h — the last height the user explicitly set.
+            # Never use _h here as it may have been overwritten by a VRChat echo.
+            h = self._intended_h
             self._status(f"Avatar/world change — re-applying {h:.3f} m…", True)
             self._send(h)
         elif self.cfg.get("apply_default_on_change"):
             dh = self.cfg["default_height"]
             self._status(f"Avatar/world change — applying default {dh:.3f} m…", True)
-            self.root.after(0, lambda: self._set(dh))
+            self._set(dh)
 
     # ── World limits ──────────────────────────────────────────────────────────
     def _update_limits(self):
@@ -2472,7 +2479,13 @@ class ScalerApp:
         self._supp = True
         h = _clamp(h, ABS_MIN, ABS_MAX)
         self._h = h
-        self.cfg["last_height"] = h
+        # Only persist as last_height and update _intended_h for user-driven changes.
+        # VRChat echoes (from_vrc=True) reflect what VRChat applied — which may be
+        # its own reset value after a world/avatar change — and must never overwrite
+        # the user's intended height.
+        if not from_vrc:
+            self._intended_h = h
+            self.cfg["last_height"] = h
 
         out = h < SAFE_MIN or h > SAFE_MAX
         self._m_lbl.config(text=f"{h:.3f}", fg=WARN if out else AHL)
