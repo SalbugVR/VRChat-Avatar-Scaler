@@ -112,7 +112,7 @@ import tkinter as tk
 from tkinter import ttk
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION       = "0.3.0"
+APP_VERSION       = "0.4.0"
 _RELEASES_API_URL = "https://api.github.com/repos/SalbugVR/VRChat-Avatar-Scaler/releases/latest"
 _RELEASES_PAGE    = "https://github.com/SalbugVR/VRChat-Avatar-Scaler/releases"
 
