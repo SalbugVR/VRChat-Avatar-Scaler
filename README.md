@@ -199,7 +199,7 @@ Your **default height** is a saved value you can return to at any time.
 
 ### Avatar and world change handling
 
-Every time you switch avatar, VRChat changes scale to match the avatar's author set scale or last-saved scale. The scaler can respond automatically the moment this happens:
+Every time you switch avatar, VRChat changes scale to match the avatar's author set scale or last-saved scale. The scaler can respond automatically the moment this happens. The re-applied height is always the last height you explicitly set — VRChat's own reset value is safely ignored even if it arrives shortly after the change event.
 
 | Mode | What happens |
 |---|---|
@@ -230,6 +230,8 @@ The scaler silently checks the GitHub releases page shortly after launch. If a n
 ### OSCQuery
 
 With the `tinyoscquery` package installed, the scaler advertises itself on the local network using mDNS. VRChat detects it automatically and sends OSC messages to it without any fixed port configuration needed. This prevents conflicts with other OSC applications that may be listening on the same ports. When OSCQuery is active, VRChat will show a HUD notification that it has found the scaler. OSCQuery can be toggled in **Settings → Network**.
+
+If the scaler was launched before VRChat and VRChat does not detect it automatically, click the **⟳ Reconnect** button in the title bar to restart the OSCQuery advertisement. VRChat should show the HUD connection notification within a few seconds.
 
 > **Note:** The installer uses [Hackebein's fork of tinyoscquery](https://github.com/Hackebein/tinyoscquery), which includes a fix for processes not closing cleanly on Windows. This fork is a drop-in replacement for the original.
 
@@ -424,9 +426,13 @@ Pre-built Windows MSI and Linux AppImage are attached to each release. No Python
 3. Make sure no firewall is blocking local UDP traffic on port 9000.
 4. Check that nothing else is already using port 9000 (another OSC app, for example).
 
-### My scale changes every time I switch avatar or enter a world
+### VRChat has not detected the scaler (no HUD notification)
 
-Enable **Retain active height** in **Settings → On Avatar / World Change**. The scaler listens for the message VRChat sends on every avatar switch and world transition and re-sends your height immediately.
+This usually happens when the scaler was launched before VRChat. Click the **⟳ Reconnect** button in the title bar — it restarts the OSCQuery advertisement and VRChat should show the HUD notification within a few seconds.
+
+### Scale applies the wrong height when switching avatars or worlds
+
+Make sure **Retain active height** is enabled in **Settings → On Avatar / World Change**. The scaler tracks the last height you explicitly set and always re-applies that value — never VRChat's own reset — so the applied height should always match what you last chose.
 
 ### "Port in use — receive disabled" in the status bar
 
